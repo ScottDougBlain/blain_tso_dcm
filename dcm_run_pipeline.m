@@ -194,16 +194,22 @@ if config.steps.specify_dcm
     fprintf('=========================================================\n');
     fprintf('  STAGE 2: DCM SPECIFICATION\n');
     fprintf('=========================================================\n');
-    
-    try
-        results.dcm_spec = dcm_specify_model(config, results.voi);
-        results.log{end+1} = 'DCM specification: SUCCESS';
-    catch err
-        results.log{end+1} = sprintf('DCM specification: FAILED - %s', err.message);
-        if strcmp(config.error_handling, 'stop')
-            rethrow(err);
-        else
-            warning('DCM specification failed: %s', err.message);
+
+    % Validate that VOI results are available
+    if ~isfield(results, 'voi') || isempty(results.voi)
+        warning('Skipping DCM specification: VOI results not available');
+        results.log{end+1} = 'DCM specification: SKIPPED - no VOI results';
+    else
+        try
+            results.dcm_spec = dcm_specify_model(config, results.voi);
+            results.log{end+1} = 'DCM specification: SUCCESS';
+        catch err
+            results.log{end+1} = sprintf('DCM specification: FAILED - %s', err.message);
+            if strcmp(config.error_handling, 'stop')
+                rethrow(err);
+            else
+                warning('DCM specification failed: %s', err.message);
+            end
         end
     end
 else
@@ -218,26 +224,32 @@ if config.steps.estimate_dcm
     fprintf('=========================================================\n');
     fprintf('  STAGE 3: DCM ESTIMATION\n');
     fprintf('=========================================================\n');
-    
-    % Apply DCM-specific exclusions
-    if ~isempty(opts.exclude_dcm)
-        for i = 1:length(results.dcm_spec)
-            if ismember(results.dcm_spec(i).subject, opts.exclude_dcm)
-                results.dcm_spec(i).success = false;
-                results.dcm_spec(i).errors{end+1} = 'Excluded via exclude_dcm';
+
+    % Validate that DCM specification results are available
+    if ~isfield(results, 'dcm_spec') || isempty(results.dcm_spec)
+        warning('Skipping DCM estimation: DCM specification results not available');
+        results.log{end+1} = 'DCM estimation: SKIPPED - no DCM specification results';
+    else
+        % Apply DCM-specific exclusions
+        if ~isempty(opts.exclude_dcm)
+            for i = 1:length(results.dcm_spec)
+                if ismember(results.dcm_spec(i).subject, opts.exclude_dcm)
+                    results.dcm_spec(i).success = false;
+                    results.dcm_spec(i).errors{end+1} = 'Excluded via exclude_dcm';
+                end
             end
         end
-    end
-    
-    try
-        results.dcm_est = dcm_estimate_model(config, results.dcm_spec);
-        results.log{end+1} = 'DCM estimation: SUCCESS';
-    catch err
-        results.log{end+1} = sprintf('DCM estimation: FAILED - %s', err.message);
-        if strcmp(config.error_handling, 'stop')
-            rethrow(err);
-        else
-            warning('DCM estimation failed: %s', err.message);
+
+        try
+            results.dcm_est = dcm_estimate_model(config, results.dcm_spec);
+            results.log{end+1} = 'DCM estimation: SUCCESS';
+        catch err
+            results.log{end+1} = sprintf('DCM estimation: FAILED - %s', err.message);
+            if strcmp(config.error_handling, 'stop')
+                rethrow(err);
+            else
+                warning('DCM estimation failed: %s', err.message);
+            end
         end
     end
 else
@@ -252,26 +264,32 @@ if config.steps.run_peb
     fprintf('=========================================================\n');
     fprintf('  STAGE 4: GROUP PEB ANALYSIS\n');
     fprintf('=========================================================\n');
-    
-    % Apply PEB-specific exclusions
-    if ~isempty(opts.exclude_peb) && isfield(results, 'dcm_est')
-        for i = 1:length(results.dcm_est)
-            if ismember(results.dcm_est(i).subject, opts.exclude_peb)
-                results.dcm_est(i).success = false;
-                results.dcm_est(i).errors{end+1} = 'Excluded via exclude_peb';
+
+    % Validate that DCM estimation results are available
+    if ~isfield(results, 'dcm_est') || isempty(results.dcm_est)
+        warning('Skipping PEB analysis: DCM estimation results not available');
+        results.log{end+1} = 'PEB analysis: SKIPPED - no DCM estimation results';
+    else
+        % Apply PEB-specific exclusions
+        if ~isempty(opts.exclude_peb)
+            for i = 1:length(results.dcm_est)
+                if ismember(results.dcm_est(i).subject, opts.exclude_peb)
+                    results.dcm_est(i).success = false;
+                    results.dcm_est(i).errors{end+1} = 'Excluded via exclude_peb';
+                end
             end
         end
-    end
-    
-    try
-        results.peb = dcm_run_peb(config, results);
-        results.log{end+1} = 'PEB analysis: SUCCESS';
-    catch err
-        results.log{end+1} = sprintf('PEB analysis: FAILED - %s', err.message);
-        if strcmp(config.error_handling, 'stop')
-            rethrow(err);
-        else
-            warning('PEB analysis failed: %s', err.message);
+
+        try
+            results.peb = dcm_run_peb(config, results);
+            results.log{end+1} = 'PEB analysis: SUCCESS';
+        catch err
+            results.log{end+1} = sprintf('PEB analysis: FAILED - %s', err.message);
+            if strcmp(config.error_handling, 'stop')
+                rethrow(err);
+            else
+                warning('PEB analysis failed: %s', err.message);
+            end
         end
     end
 else
@@ -407,6 +425,31 @@ end
 
 if size(config.dcm.C, 1) ~= nROI || size(config.dcm.C, 2) ~= nCond
     error('config.dcm.C must be %dx%d matrix', nROI, nCond);
+end
+
+% Validate VOI extraction settings (set defaults if missing)
+if ~isfield(config, 'voi')
+    config.voi = struct();
+end
+if ~isfield(config.voi, 'threshold_p')
+    config.voi.threshold_p = 1;  % Default: unthresholded
+    fprintf('  Using default voi.threshold_p = 1 (unthresholded)\n');
+end
+if ~isfield(config.voi, 'threshold_extent')
+    config.voi.threshold_extent = 0;
+    fprintf('  Using default voi.threshold_extent = 0\n');
+end
+if ~isfield(config.voi, 'correction')
+    config.voi.correction = 'none';
+    fprintf('  Using default voi.correction = ''none''\n');
+end
+if ~isfield(config.voi, 'contrast_num')
+    config.voi.contrast_num = 1;
+    fprintf('  Using default voi.contrast_num = 1\n');
+end
+if ~isfield(config.voi, 'eoi_contrast')
+    config.voi.eoi_contrast = 0;
+    fprintf('  Using default voi.eoi_contrast = 0 (no adjustment)\n');
 end
 
 fprintf('  Configuration validated successfully\n');

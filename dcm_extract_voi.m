@@ -166,10 +166,6 @@ function voi_file = extract_voi_spm12(spm_mat, roi_name, roi_center, roi_radius,
 
 [spm_dir, ~, ~] = fileparts(spm_mat);
 
-% Load SPM
-SPM = [];
-load(spm_mat, 'SPM');
-
 % Set up the extraction job
 clear matlabbatch
 
