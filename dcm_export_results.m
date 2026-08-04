@@ -14,9 +14,10 @@ function dcm_export_results(config, results)
 % OUTPUTS:
 %   Creates CSV files in the output directory:
 %   - [study]_individual_params.csv  - Subject-level DCM parameters
-%   - [study]_peb_group_params.csv   - Group-level PEB parameters
-%   - [study]_peb_diff_params.csv    - Between-group differences
 %   - [study]_diagnostics.csv        - Model fit diagnostics
+%   - [study]_peb_all_params.csv     - Grand mean PEB parameters
+%   - [study]_peb_diff_params.csv    - Between-group differences
+%   - [study]_peb_[group]_params.csv - Per-group PEB parameters
 %
 % SEE ALSO: dcm_run_peb, dcm_estimate_model
 
@@ -60,7 +61,6 @@ if isfield(results, 'dcm_est') || isfield(results, 'est_results')
         
         % Build parameter labels
         param_labels = {};
-        param_values = [];
         
         % A matrix parameters
         for i = 1:n_rois
@@ -227,16 +227,17 @@ if isfield(results, 'peb') && isfield(results.peb, 'PEB_all')
         pnames = arrayfun(@(x) sprintf('Param%d', x), 1:length(PEB.Ep), 'UniformOutput', false);
     end
     
-    % Posterior mean and variance
-    Ep = PEB.Ep(:);
-    Cp = diag(PEB.Cp);
-    
+    % Posterior mean and variance (full() needed — PEB outputs are sparse)
+    Ep = full(PEB.Ep(:));
+    Cp = full(diag(PEB.Cp));
+    Cp = Cp(1:length(Ep));  % Ensure matching length
+
     % Calculate posterior probability of being non-zero
     Pp = 1 - spm_Ncdf(0, abs(Ep), Cp);
-    
+
     T_peb = table(pnames', Ep, Cp, Pp, ...
         'VariableNames', {'Parameter', 'PosteriorMean', 'PosteriorVar', 'PosteriorProb'});
-    
+
     csv_file = fullfile(output_dir, sprintf('%s_peb_all_params.csv', study_name));
     writetable(T_peb, csv_file);
     fprintf('    Saved: %s\n', csv_file);
@@ -263,17 +264,23 @@ if isfield(results, 'peb') && isfield(results.peb, 'PEB_diff')
     
     n_effects = length(effect_names);
     n_params = length(PEB.Ep) / n_effects;
-    
-    % Reshape for export
-    Ep_matrix = reshape(PEB.Ep, n_params, n_effects);
-    Cp_matrix = reshape(diag(PEB.Cp), n_params, n_effects);
-    
-    % Create table with effect columns
+
+    % Reshape for export (full() needed — PEB outputs are sparse)
+    Ep_matrix = full(reshape(PEB.Ep, n_params, n_effects));
+    Cp_diag = full(diag(PEB.Cp));
+    Cp_diag = Cp_diag(1:n_params * n_effects);  % Ensure matching length
+    Cp_matrix = reshape(Cp_diag, n_params, n_effects);
+
+    % Create table with effect columns (Ep, Var, and Pp per effect)
     T_diff = table(pnames(1:n_params)', 'VariableNames', {'Parameter'});
     for e = 1:n_effects
         eff_name = matlab.lang.makeValidName(effect_names{e});
-        T_diff.([eff_name '_Ep']) = Ep_matrix(:, e);
-        T_diff.([eff_name '_Var']) = Cp_matrix(:, e);
+        Ep_col = Ep_matrix(:, e);
+        Cp_col = Cp_matrix(:, e);
+        Pp_col = 1 - spm_Ncdf(0, abs(Ep_col), Cp_col);
+        T_diff.([eff_name '_Ep']) = Ep_col;
+        T_diff.([eff_name '_Var']) = Cp_col;
+        T_diff.([eff_name '_Pp']) = Pp_col;
     end
     
     csv_file = fullfile(output_dir, sprintf('%s_peb_diff_params.csv', study_name));
@@ -297,8 +304,9 @@ if isfield(results, 'peb') && isfield(results.peb, 'PEB_group')
             pnames = arrayfun(@(x) sprintf('Param%d', x), 1:length(PEB.Ep), 'UniformOutput', false);
         end
         
-        Ep = PEB.Ep(:);
-        Cp = diag(PEB.Cp);
+        Ep = full(PEB.Ep(:));
+        Cp = full(diag(PEB.Cp));
+        Cp = Cp(1:length(Ep));  % Ensure matching length
         Pp = 1 - spm_Ncdf(0, abs(Ep), Cp);
         
         T_grp = table(pnames', Ep, Cp, Pp, ...

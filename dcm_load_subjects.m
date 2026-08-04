@@ -96,9 +96,17 @@ subjects = struct('id', {}, 'runs', {}, 'group', {}, 'excluded', {}, 'notes', {}
 % Process each subject
 for i = 1:n_subj
     subj = struct();
-    
+
     % Get subject ID (ensure it's a string)
-    subj.id = char(T.SubjectID(i));
+    % Handle both numeric and string/categorical SubjectID columns
+    sid = T.SubjectID(i);
+    if isnumeric(sid)
+        subj.id = num2str(sid);
+    elseif iscell(sid)
+        subj.id = char(sid{1});
+    else
+        subj.id = char(sid);
+    end
     
     % Get runs to include
     if n_runs > 0

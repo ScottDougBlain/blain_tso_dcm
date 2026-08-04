@@ -75,10 +75,17 @@ group_labels = cell(n_success, 1);
 if isstruct(config.subjects)
     subjects = config.subjects;
 else
+    % Handle cell array format with bounds checking
     subjects = struct();
+    n_cols = size(config.subjects, 2);
     for i = 1:size(config.subjects, 1)
         subjects(i).id = config.subjects{i, 1};
-        subjects(i).group = config.subjects{i, 3};
+        % Group is in column 3 if present, otherwise 'Unknown'
+        if n_cols >= 3
+            subjects(i).group = config.subjects{i, 3};
+        else
+            subjects(i).group = 'Unknown';
+        end
     end
 end
 
@@ -356,14 +363,19 @@ else
 end
 
 % Get posterior probabilities (if available from BMC)
+% Note: PEB outputs (Ep, Cp) are sparse matrices — use full()
 if isfield(PEB, 'Pp')
-    Pp = PEB.Pp;
+    Pp = full(PEB.Pp);
 else
     % Calculate from posterior variance
-    Pp = 1 - spm_Ncdf(0, abs(PEB.Ep), diag(PEB.Cp));
+    Ep_full = full(PEB.Ep(:));
+    Cp_full = full(diag(PEB.Cp));
+    Cp_full = Cp_full(1:length(Ep_full));
+    Pp = 1 - spm_Ncdf(0, abs(Ep_full), Cp_full);
 end
 
 % Report effects with high posterior probability (>0.95)
+Ep_report = full(PEB.Ep(:));
 sig_idx = find(Pp > 0.95);
 
 if isempty(sig_idx)
@@ -373,7 +385,7 @@ else
     for i = 1:length(sig_idx)
         idx = sig_idx(i);
         if idx <= length(pnames)
-            fprintf('      %s: Ep=%.3f, Pp=%.3f\n', pnames{idx}, PEB.Ep(idx), Pp(idx));
+            fprintf('      %s: Ep=%.3f, Pp=%.3f\n', pnames{idx}, Ep_report(idx), Pp(idx));
         end
     end
 end
@@ -387,10 +399,11 @@ function params = extract_peb_parameters(peb_results, config)
 params = struct();
 
 % From PEB_all (grand mean)
+% Note: PEB outputs (Ep, Cp) are sparse matrices — use full()
 if isfield(peb_results, 'PEB_all') && ~isempty(peb_results.PEB_all)
     PEB = peb_results.PEB_all;
-    params.grand_mean.Ep = PEB.Ep;
-    params.grand_mean.Cp = diag(PEB.Cp);
+    params.grand_mean.Ep = full(PEB.Ep);
+    params.grand_mean.Cp = full(diag(PEB.Cp));
     if isfield(PEB, 'Pnames')
         params.grand_mean.names = PEB.Pnames;
     end
@@ -402,16 +415,16 @@ if isfield(peb_results, 'PEB_group')
     for g = 1:length(groups)
         grp = groups{g};
         PEB = peb_results.PEB_group.(grp);
-        params.by_group.(grp).Ep = PEB.Ep;
-        params.by_group.(grp).Cp = diag(PEB.Cp);
+        params.by_group.(grp).Ep = full(PEB.Ep);
+        params.by_group.(grp).Cp = full(diag(PEB.Cp));
     end
 end
 
 % From PEB_diff (group differences)
 if isfield(peb_results, 'PEB_diff') && ~isempty(peb_results.PEB_diff)
     PEB = peb_results.PEB_diff;
-    params.group_diff.Ep = PEB.Ep;
-    params.group_diff.Cp = diag(PEB.Cp);
+    params.group_diff.Ep = full(PEB.Ep);
+    params.group_diff.Cp = full(diag(PEB.Cp));
     if isfield(PEB, 'Pnames')
         params.group_diff.names = PEB.Pnames;
     end

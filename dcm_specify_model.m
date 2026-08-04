@@ -104,24 +104,58 @@ for s = 1:n_subj
         % Load SPM
         SPM = [];
         load(spm_mat, 'SPM');
-        
-        % Determine runs to use (first run with valid VOIs)
-        % For now, use first run - can extend to concatenated later
-        run_num = 1;
-        
-        % Load VOI data
-        VOI = cell(n_rois, 1);
-        for r = 1:n_rois
-            voi_file = voi.voi_files{run_num, r};
-            if ~exist(voi_file, 'file')
-                error('VOI file not found: %s', voi_file);
+        n_sessions = length(SPM.Sess);
+
+        % Determine whether to concatenate runs
+        % Check for dcm.concatenate_vois option (preferred) or concat.enabled (legacy)
+        concatenate_vois = isfield(config, 'dcm') && ...
+                          isfield(config.dcm, 'concatenate_vois') && ...
+                          config.dcm.concatenate_vois;
+        concatenate_legacy = isfield(config, 'concat') && ...
+                            isfield(config.concat, 'enabled') && ...
+                            config.concat.enabled;
+        concatenate_runs = (concatenate_vois || concatenate_legacy) && ...
+                          n_sessions > 1 && ...
+                          size(voi.voi_files, 1) >= n_sessions;
+
+        if concatenate_runs
+            % Concatenate VOI timeseries from all runs with PROPER confound handling
+            fprintf('  Concatenating %d runs with proper confound regression...\n', n_sessions);
+
+            % Get parameters for concatenation
+            TR = SPM.xY.RT;
+            n_volumes_per_run = config.acquisition.volumes_per_run;
+
+            % Get high-pass filter cutoff from config or use SPM default
+            hp_cutoff = 128;
+            if isfield(config, 'glm') && isfield(config.glm, 'model') && ...
+               isfield(config.glm.model, 'high_pass_filter')
+                hp_cutoff = config.glm.model.high_pass_filter;
             end
-            tmp = load(voi_file);
-            VOI{r} = tmp.xY;
+
+            % Use proper concatenation with confound regression
+            VOI = dcm_concatenate_voi_proper(voi.voi_files, n_volumes_per_run, TR, hp_cutoff);
+
+            % Specify DCM structure with concatenated data
+            DCM = specify_dcm_structure_concat(SPM, VOI, config);
+        else
+            % Use single run (first available)
+            run_num = 1;
+
+            % Load VOI data from single run
+            VOI = cell(n_rois, 1);
+            for r = 1:n_rois
+                voi_file = voi.voi_files{run_num, r};
+                if ~exist(voi_file, 'file')
+                    error('VOI file not found: %s', voi_file);
+                end
+                tmp = load(voi_file);
+                VOI{r} = tmp.xY;
+            end
+
+            % Specify DCM structure for single run
+            DCM = specify_dcm_structure(SPM, VOI, config, run_num);
         end
-        
-        % Specify DCM structure
-        DCM = specify_dcm_structure(SPM, VOI, config, run_num);
         
         % Save DCM
         save(dcm_file, 'DCM');
@@ -259,5 +293,132 @@ end
 
 %% Model metadata
 DCM.name = sprintf('DCM_%s', datestr(now, 'yyyymmdd'));
+
+end
+
+
+%% ========================================================================
+%  HELPER FUNCTION: Create DCM Structure with Concatenated Runs
+%  ========================================================================
+
+function DCM = specify_dcm_structure_concat(SPM, VOI, config)
+%SPECIFY_DCM_STRUCTURE_CONCAT Create DCM structure from concatenated VOIs
+%
+% Builds the DCM structure for concatenated multi-run data.
+% Concatenates stimulus timing from all sessions.
+
+n_rois = length(VOI);
+n_conds = size(config.conditions, 1);
+n_sessions = length(SPM.Sess);
+
+% Initialize DCM structure
+DCM = struct();
+
+%% VOI/Regional data (Y)
+DCM.Y.dt = SPM.xY.RT;  % TR
+
+% Time-series from each region (already concatenated)
+for r = 1:n_rois
+    DCM.xY(r) = VOI{r};
+    DCM.Y.y(:,r) = VOI{r}.u;
+    DCM.Y.name{r} = VOI{r}.name;
+end
+
+DCM.Y.X0 = VOI{1}.X0;  % Confounds (already concatenated)
+DCM.n = n_rois;
+DCM.v = length(VOI{1}.u);  % Number of time points (concatenated)
+
+% Covariance constraints
+DCM.Y.Q = spm_Ce(ones(1, n_rois) * DCM.v);
+
+%% Experimental inputs (U) - concatenate from all sessions
+DCM.U.dt = SPM.Sess(1).U(1).dt;
+
+% Find condition indices in first session (assume same across sessions)
+cond_idx = [];
+for c = 1:n_conds
+    cond_name = config.conditions{c};
+    for u = 1:length(SPM.Sess(1).U)
+        if strcmp(SPM.Sess(1).U(u).name{1}, cond_name)
+            cond_idx(c) = u;
+            break;
+        end
+    end
+end
+
+if length(cond_idx) ~= n_conds
+    error('Not all conditions found in SPM.mat');
+end
+
+% Concatenate stimulus functions from all sessions
+DCM.U.name = config.conditions';
+DCM.U.u = [];
+
+for c = 1:n_conds
+    concat_u = [];
+    for sess = 1:n_sessions
+        u_raw = SPM.Sess(sess).U(cond_idx(c)).u;
+        % Skip first 32 time bins - SPM convention for microtime
+        if size(u_raw, 1) > 32
+            sess_u = u_raw(33:end, 1);
+        else
+            sess_u = u_raw(:, 1);
+        end
+        concat_u = [concat_u; sess_u];
+    end
+    DCM.U.u(:,c) = concat_u;
+end
+
+%% Timing parameters
+TR = SPM.xY.RT;
+if isfield(config.acquisition, 'TE') && ~isempty(config.acquisition.TE)
+    TE = config.acquisition.TE;
+else
+    TE = 0.04;  % Default 40ms
+end
+
+DCM.delays = repmat(TR/2, 1, n_rois);  % Slice timing (assume middle)
+DCM.TE = TE;
+
+%% Connectivity matrices
+% A: Intrinsic connections
+DCM.a = double(config.dcm.A > 0);
+
+% B: Modulatory effects
+DCM.b = zeros(n_rois, n_rois, n_conds);
+for c = 1:n_conds
+    DCM.b(:,:,c) = double(config.dcm.B{c} > 0);
+end
+
+% C: Driving inputs
+DCM.c = double(config.dcm.C > 0);
+
+% D: Nonlinear modulation (not used)
+DCM.d = zeros(n_rois, n_rois, 0);
+
+%% DCM options
+DCM.options.nonlinear = 0;
+DCM.options.two_state = 0;
+DCM.options.stochastic = 0;
+DCM.options.centre = 1;
+DCM.options.induced = 0;
+DCM.options.nograph = 1;
+
+if isfield(config.dcm, 'options')
+    if isfield(config.dcm.options, 'nonlinear')
+        DCM.options.nonlinear = config.dcm.options.nonlinear;
+    end
+    if isfield(config.dcm.options, 'two_state')
+        DCM.options.two_state = config.dcm.options.two_state;
+    end
+    if isfield(config.dcm.options, 'stochastic')
+        DCM.options.stochastic = config.dcm.options.stochastic;
+    end
+end
+
+%% Model metadata
+DCM.name = sprintf('DCM_%s_concat%d', datestr(now, 'yyyymmdd'), n_sessions);
+
+fprintf('  Created DCM with %d concatenated runs (%d timepoints)\n', n_sessions, DCM.v);
 
 end
