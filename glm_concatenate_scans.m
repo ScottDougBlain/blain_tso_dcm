@@ -14,7 +14,7 @@ function [scan_files, concat_motion] = glm_concatenate_scans(config, subject_id,
 %
 % OUTPUTS:
 %   scan_files    - Cell array of all scan file paths in order
-%   concat_motion - Structure with concatenated motion:
+%   concat_confounds - Structure with concatenated motion:
 %       .R        - [total_vols x 12] concatenated motion matrix
 %       .names    - Cell array of regressor names
 %       .n_vols   - Total number of volumes
@@ -23,17 +23,17 @@ function [scan_files, concat_motion] = glm_concatenate_scans(config, subject_id,
 % CONFIGURATION:
 %   config.glm.images.template - Directory template with [Subject], [Run]
 %   config.glm.images.filter   - Regex filter for spm_select
-%   config.glm.motion.*        - Motion parameter settings
+%   config.glm.confounds.*     - Confound parameter settings
 %
-% SEE ALSO: glm_build_batch, glm_load_motion, glm_run_firstlevel
+% SEE ALSO: glm_build_batch, glm_load_confounds, glm_run_firstlevel
 
 %% Initialize outputs
 scan_files = {};
-concat_motion = struct();
-concat_motion.R = [];
-concat_motion.names = {};
-concat_motion.n_vols = 0;
-concat_motion.run_vols = [];
+concat_confounds = struct();
+concat_confounds.R = [];
+concat_confounds.names = {};
+concat_confounds.n_vols = 0;
+concat_confounds.run_vols = [];
 
 %% Process each run
 n_runs = length(runs);
@@ -68,14 +68,14 @@ for r = 1:n_runs
     run_scans = cellstr(scans);
     scan_files = [scan_files; run_scans];
 
-    %% Load motion parameters for this run
-    motion = glm_load_motion(config, subject_id, run_num);
+    %% Load confounds parameters for this run
+    confounds = glm_load_confounds(config, subject_id, run_num);
 
     % Verify volume counts match
     n_scans = size(scans, 1);
-    if motion.n_vols ~= n_scans
-        warning('GLM:Concat', 'Volume mismatch run %d: %d scans vs %d motion rows', ...
-            run_num, n_scans, motion.n_vols);
+    if confounds.n_vols ~= n_scans
+        warning('GLM:Concat', 'Volume mismatch run %d: %d scans vs %d confounds rows', ...
+            run_num, n_scans, confounds.n_vols);
     end
 
     % Concatenate motion

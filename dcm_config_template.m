@@ -73,11 +73,12 @@ config.data.timing_columns.onset = 'TrialOnset';       % Trial onset time column
 config.data.timing_columns.duration = 'Duration';      % Trial duration column
 config.data.timing_columns.concat_onset = 'Onset_Concat';  % Concatenated onset column (if pre-computed)
 
-%% --- Motion Parameters ---
+%% --- Confound Parameters ---
 % Template path to motion parameter files (same directory structure as images)
-config.data.motion_dir = '[project_root]/Datasets/SchizGaze2/MRI/Subjects/[Subject]/func/gaze/run_[Run]/';
-config.data.motion_patterns = {'rp_utrun_*.txt', 'rp_*.txt', 'rp*.txt'};  % Filename patterns to try (in order)
-config.data.motion_derivatives = true;  % Include temporal derivatives (6 params + 6 derivatives = 12)
+config.data.confounds_dir = '[project_root]/Datasets/SchizGaze2/MRI/Subjects/[Subject]/func/gaze/run_[Run]/';
+config.data.confounds_patterns = {'rp_utrun_*.txt', 'rp_*.txt', 'rp*.txt'};  % Filename patterns to try (in order)
+config.data.confounds_names = {'trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z'}; %
+config.data.confounds_derivatives = true;  % Include temporal derivatives (6 params + 6 derivatives = 12)
 
 %% ========================================================================
 %  SUBJECT DEFINITIONS
@@ -546,6 +547,7 @@ config.glm.timing.onset_column = config.data.timing_columns.onset;
 config.glm.timing.duration_column = config.data.timing_columns.duration;
 config.glm.timing.concat_onset_column = config.data.timing_columns.concat_onset;
 
-config.glm.motion.dir_template = config.data.motion_dir;
-config.glm.motion.patterns = config.data.motion_patterns;
-config.glm.motion.include_derivatives = config.data.motion_derivatives;
+config.glm.confounds.dir_template = config.data.confounds_dir;
+config.glm.confounds.patterns = config.data.confounds_patterns;
+config.glm.confounds.names = config.data.confounds_names;
+config.glm.confounds.include_derivatives = config.data.confounds_derivatives;

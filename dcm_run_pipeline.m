@@ -288,40 +288,40 @@ results.log{end+1} = sprintf('Subjects: %d total, %d included', n_total, n_inclu
 results.log{end+1} = sprintf('ROIs: %d', config.n_rois);
 results.log{end+1} = sprintf('Conditions: %d', config.n_conditions);
 
-%% ========================================================================
-%  PATH REMAPPING (for migrated data)
-%  ========================================================================
-if isfield(config, 'path_remap') && isfield(config.path_remap, 'enabled') && config.path_remap.enabled
-    fprintf('\n');
-    fprintf('=========================================================\n');
-    fprintf('  PATH REMAPPING\n');
-    fprintf('=========================================================\n');
-    fprintf('Updating SPM.mat paths for migrated data...\n');
-    fprintf('  Old: %s\n', config.path_remap.old_base);
-    fprintf('  New: %s\n', config.path_remap.new_base);
-
-    % Get additional replacements if specified
-    additional_replacements = {};
-    if isfield(config.path_remap, 'replacements') && ~isempty(config.path_remap.replacements)
-        additional_replacements = config.path_remap.replacements;
-    end
-
-    % Update paths for each subject
-    for i = 1:length(subjects)
-        if ~subjects(i).excluded
-            spm_path = dcm_gen_path(config.paths.templates.firstlevel, config, 'Subject', subjects(i).id);
-            spm_mat = fullfile(spm_path, 'SPM.mat');
-            if exist(spm_mat, 'file')
-                try
-                    dcm_update_spm_paths(spm_mat, config.path_remap.old_base, config.path_remap.new_base, additional_replacements);
-                catch err
-                    warning('Failed to update paths for subject %s: %s', subjects(i).id, err.message);
-                end
-            end
-        end
-    end
-    results.log{end+1} = 'Path remapping: COMPLETE';
-end
+% %% ========================================================================
+% %  PATH REMAPPING (for migrated data)
+% %  ========================================================================
+% if isfield(config, 'path_remap') && isfield(config.path_remap, 'enabled') && config.path_remap.enabled
+%     fprintf('\n');
+%     fprintf('=========================================================\n');
+%     fprintf('  PATH REMAPPING\n');
+%     fprintf('=========================================================\n');
+%     fprintf('Updating SPM.mat paths for migrated data...\n');
+%     fprintf('  Old: %s\n', config.path_remap.old_base);
+%     fprintf('  New: %s\n', config.path_remap.new_base);
+% 
+%     % Get additional replacements if specified
+%     additional_replacements = {};
+%     if isfield(config.path_remap, 'replacements') && ~isempty(config.path_remap.replacements)
+%         additional_replacements = config.path_remap.replacements;
+%     end
+% 
+%     % Update paths for each subject
+%     for i = 1:length(subjects)
+%         if ~subjects(i).excluded
+%             spm_path = dcm_gen_path(config.paths.templates.firstlevel, config, 'Subject', subjects(i).id);
+%             spm_mat = fullfile(spm_path, 'SPM.mat');
+%             if exist(spm_mat, 'file')
+%                 try
+%                     dcm_update_spm_paths(spm_mat, config.path_remap.old_base, config.path_remap.new_base, additional_replacements);
+%                 catch err
+%                     warning('Failed to update paths for subject %s: %s', subjects(i).id, err.message);
+%                 end
+%             end
+%         end
+%     end
+%     results.log{end+1} = 'Path remapping: COMPLETE';
+% end
 
 %% ========================================================================
 %  TIMING FILE CONCATENATION (optional)
