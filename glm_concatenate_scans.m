@@ -1,11 +1,11 @@
-function [scan_files, concat_motion] = glm_concatenate_scans(config, subject_id, runs)
-%GLM_CONCATENATE_SCANS Concatenate functional scans and motion for DCM GLM
+function [scan_files, concat_confounds] = glm_concatenate_scans(config, subject_id, runs)
+%GLM_CONCATENATE_SCANS Concatenate functional scans and confounds for DCM GLM
 %
-% Gathers all functional scan files across runs and concatenates motion
+% Gathers all functional scan files across runs and concatenates confounds
 % parameters for single-session DCM GLM specification.
 %
 % USAGE:
-%   [scans, motion] = glm_concatenate_scans(config, '1001', [1 2 3])
+%   [scans, confounds] = glm_concatenate_scans(config, '1001', [1 2 3])
 %
 % INPUTS:
 %   config     - Configuration structure with glm.images settings
@@ -14,8 +14,8 @@ function [scan_files, concat_motion] = glm_concatenate_scans(config, subject_id,
 %
 % OUTPUTS:
 %   scan_files    - Cell array of all scan file paths in order
-%   concat_confounds - Structure with concatenated motion:
-%       .R        - [total_vols x 12] concatenated motion matrix
+%   concat_confounds - Structure with concatenated confounds:
+%       .R        - [total_vols x 12] concatenated confounds matrix
 %       .names    - Cell array of regressor names
 %       .n_vols   - Total number of volumes
 %       .run_vols - Vector of volumes per run
@@ -58,6 +58,10 @@ for r = 1:n_runs
 
     % Use spm_select to get scans
     filter = config.glm.images.filter;
+    filter = dcm_gen_path(filter,'Subject', subject_id, 'Run', run_str);
+
+    glm_gunzip_scans(config, subject_id,run_str)
+
     scans = spm_select('ExtFPList', scan_dir, filter, Inf);
 
     if isempty(scans)
@@ -78,30 +82,30 @@ for r = 1:n_runs
             run_num, n_scans, confounds.n_vols);
     end
 
-    % Concatenate motion
-    concat_motion.R = [concat_motion.R; motion.R];
-    concat_motion.run_vols(r) = n_scans;
+    % Concatenate confounds
+    concat_confounds.R = [concat_confounds.R; confounds.R];
+    concat_confounds.run_vols(r) = n_scans;
 
     % Store names (should be same for all runs)
-    if isempty(concat_motion.names)
-        concat_motion.names = motion.names;
+    if isempty(concat_confounds.names)
+        concat_confounds.names = confounds.names;
     end
 end
 
 %% Update totals
-concat_motion.n_vols = size(concat_motion.R, 1);
+concat_confounds.n_vols = size(concat_confounds.R, 1);
 
 %% Verify total volumes
 total_scans = length(scan_files);
-if concat_motion.n_vols ~= total_scans
-    warning('GLM:Concat', 'Total volume mismatch: %d scans vs %d motion rows', ...
-        total_scans, concat_motion.n_vols);
+if concat_confounds.n_vols ~= total_scans
+    warning('GLM:Concat', 'Total volume mismatch: %d scans vs %d confounds rows', ...
+        total_scans, concat_confounds.n_vols);
 end
 
 %% Report summary
 fprintf('  Concatenated %d runs: %d total volumes\n', n_runs, total_scans);
 for r = 1:n_runs
-    fprintf('    Run %d: %d volumes\n', runs(r), concat_motion.run_vols(r));
+    fprintf('    Run %d: %d volumes\n', runs(r), concat_confounds.run_vols(r));
 end
 
 end
