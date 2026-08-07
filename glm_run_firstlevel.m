@@ -175,20 +175,21 @@ for s = 1:n_subj
         timing = glm_load_timing(config, subj.id, glm_type);
         fprintf('    Found %d runs, %d conditions\n', timing.n_runs, length(timing.conditions));
 
-        %% Load motion parameters (for standard GLM)
-        motion_data = {};
+        %% Load confounds parameters (for standard GLM)
+        confounds_data = {};
         if strcmp(glm_type, 'standard')
-            fprintf('  Loading motion parameters...\n');
+            fprintf('  Loading confounds parameters...\n');
             for r = 1:timing.n_runs
                 run_num = timing.runs(r);
-                motion_data{r} = glm_load_motion(config, subj.id, run_num);
-                fprintf('    Run %d: %d volumes\n', run_num, motion_data{r}.n_vols);
+                confounds_data{r} = glm_load_confounds(config, subj.id, run_num);
+                %reduce data to num of scans
+                fprintf('    Run %d: %d volumes\n', run_num, confounds_data{r}.n_vols);
             end
         end
 
         %% Build and run SPM batch
         fprintf('  Building SPM batch...\n');
-        matlabbatch = glm_build_batch(config, subj.id, timing, motion_data, glm_type, output_dir);
+        matlabbatch = glm_build_batch(config, subj.id, timing, confounds_data, glm_type, output_dir);
 
         fprintf('  Running model specification and estimation...\n');
         spm('defaults', 'FMRI');

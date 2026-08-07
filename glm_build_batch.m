@@ -1,4 +1,4 @@
-function matlabbatch = glm_build_batch(config, subject_id, timing, motion_data, glm_type, output_dir)
+function matlabbatch = glm_build_batch(config, subject_id, timing, confounds_data, glm_type, output_dir)
 %GLM_BUILD_BATCH Construct SPM batch for GLM specification and estimation
 %
 % Builds an SPM batch job structure for first-level fMRI model specification
@@ -6,22 +6,22 @@ function matlabbatch = glm_build_batch(config, subject_id, timing, motion_data, 
 % (DCM) configurations.
 %
 % USAGE:
-%   matlabbatch = glm_build_batch(config, '1001', timing, motion, 'standard', output_dir)
-%   matlabbatch = glm_build_batch(config, '1001', timing, motion, 'dcm', output_dir)
+%   matlabbatch = glm_build_batch(config, '1001', timing, confounds, 'standard', output_dir)
+%   matlabbatch = glm_build_batch(config, '1001', timing, confounds, 'dcm', output_dir)
 %
 % INPUTS:
 %   config      - Configuration structure
 %   subject_id  - Subject ID string
 %   timing      - Output from glm_load_timing
-%   motion_data - Cell array of motion structures (one per run) for standard
-%                 OR single concatenated motion structure for dcm
+%   confounds_data - Cell array of confounds structures (one per run) for standard
+%                 OR single concatenated confounds structure for dcm
 %   glm_type    - 'standard' or 'dcm'
 %   output_dir  - Output directory for SPM.mat
 %
 % OUTPUTS:
 %   matlabbatch - SPM batch structure ready for spm_jobman
 %
-% SEE ALSO: glm_run_firstlevel, glm_load_timing, glm_load_motion
+% SEE ALSO: glm_run_firstlevel, glm_load_timing, glm_load_confounds
 
 %% Initialize batch
 matlabbatch = {};
@@ -74,7 +74,10 @@ if strcmp(glm_type, 'standard')
         %% Get functional scans for this run
         scan_dir = dcm_gen_path(config.glm.images.template, config, ...
             'Subject', subject_id, 'Run', run_str);
-        filter = config.glm.images.filter;
+        filter = dcm_gen_path(config.glm.images.filter, config, ...
+            'Subject', subject_id, 'Run', run_str);
+
+        glm_gunzip_scans(config, subject_id,run_str)
         scans = spm_select('ExtFPList', scan_dir, filter, Inf);
 
         if isempty(scans)
@@ -118,26 +121,28 @@ if strcmp(glm_type, 'standard')
             matlabbatch{1}.spm.stats.fmri_spec.sess(r).cond = struct('name', {}, 'onset', {}, 'duration', {}, 'tmod', {}, 'pmod', {}, 'orth', {});
         end
 
-        %% Add motion regressors
+        %% Add confounds regressors
         matlabbatch{1}.spm.stats.fmri_spec.sess(r).multi = {''};
         matlabbatch{1}.spm.stats.fmri_spec.sess(r).regress = struct('name', {}, 'val', {});
 
-        % Save motion to temp file for SPM
-        motion = motion_data{r};
-        R = motion.R;
-        names = motion.names;
+        % Save confounds to temp file for SPM
+        confounds = confounds_data{r};
+        R = confounds.R;
+        names = confounds.names;
+        R = table2array(tail(R, length(scans))); %takes last number of rows equal to number of scans
 
-        motion_file = fullfile(output_dir, sprintf('motion_run%02d.mat', run_num));
-        save(motion_file, 'R', 'names');
-        matlabbatch{1}.spm.stats.fmri_spec.sess(r).multi_reg = {motion_file};
+
+        confounds_file = fullfile(output_dir, sprintf('confounds_run%02d.mat', run_num));
+        save(confounds_file, 'R', 'names');
+        matlabbatch{1}.spm.stats.fmri_spec.sess(r).multi_reg = {confounds_file};
 
         matlabbatch{1}.spm.stats.fmri_spec.sess(r).hpf = hpf;
     end
 
 else
     %% DCM GLM: Single concatenated session
-    % motion_data should be concatenated structure from glm_concatenate_scans
-    [scan_files, concat_motion] = glm_concatenate_scans(config, subject_id, timing.runs);
+    % confounds_data should be concatenated structure from glm_concatenate_scans
+    [scan_files, concat_confounds] = glm_concatenate_scans(config, subject_id, timing.runs);
 
     matlabbatch{1}.spm.stats.fmri_spec.sess(1).scans = scan_files;
 
@@ -171,17 +176,17 @@ else
         end
     end
 
-    %% Add concatenated motion regressors
+    %% Add concatenated confounds regressors
     matlabbatch{1}.spm.stats.fmri_spec.sess(1).multi = {''};
     matlabbatch{1}.spm.stats.fmri_spec.sess(1).regress = struct('name', {}, 'val', {});
 
-    % Save concatenated motion
-    R = concat_motion.R;
-    names = concat_motion.names;
+    % Save concatenated confounds
+    R = table2array(concat_confounds.R);
+    names = concat_confounds.names;
 
-    motion_file = fullfile(output_dir, 'motion_concat.mat');
-    save(motion_file, 'R', 'names');
-    matlabbatch{1}.spm.stats.fmri_spec.sess(1).multi_reg = {motion_file};
+    confounds_file = fullfile(output_dir, 'confounds_concat.mat');
+    save(confounds_file, 'R', 'names');
+    matlabbatch{1}.spm.stats.fmri_spec.sess(1).multi_reg = {confounds_file};
 
     matlabbatch{1}.spm.stats.fmri_spec.sess(1).hpf = hpf;
 end

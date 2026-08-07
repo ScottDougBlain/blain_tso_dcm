@@ -9,8 +9,7 @@ if ~exist(scan_dir, 'dir')
     error('GLM:Concat', 'Scan directory not found: %s', scan_dir);
 end
 
-filter = config.glm.images.filter;
-filter = dcm_gen_path(filter,'Subject', subject_id, 'Run', run_str);
+filter = dcm_gen_path(config.glm.images.filter,'Subject', subject_id, 'Run', run_str);
 
 matches = dir(fullfile(scan_dir,filter));
 

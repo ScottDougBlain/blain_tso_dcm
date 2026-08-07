@@ -810,7 +810,7 @@ fprintf('\n');
 %   results.dcm_est  % Access individual DCM results
 
 if config.output.save_workspace
-    output_dir = dcm_gen_path(config.paths.output_base, config);
+    output_dir = dcm_gen_path(config.paths.log_dir, config);
     if ~exist(output_dir, 'dir')
         mkdir(output_dir);
     end

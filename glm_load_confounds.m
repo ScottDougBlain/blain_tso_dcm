@@ -124,6 +124,9 @@ else
     names = confounds_cols;
 end
 
+
+
+
 %% Build output structure
 confounds = struct();
 confounds.R = R;

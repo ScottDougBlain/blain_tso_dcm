@@ -150,7 +150,7 @@ if startsWith(first_line, '#')
     data = readtable(input_file, opts);
 else
     % Standard CSV
-    data = readtable(input_file);
+    data = readtable(input_file); %%
 end
 
 n_rows = height(data);

@@ -78,8 +78,9 @@ for r = 1:n_runs
     % Verify volume counts match
     n_scans = size(scans, 1);
     if confounds.n_vols ~= n_scans
-        warning('GLM:Concat', 'Volume mismatch run %d: %d scans vs %d confounds rows', ...
+        warning('GLM:Concat', 'Volume mismatch run %d: %d scans vs %d confounds rows. Taking last mathcing rows of confounds', ...
             run_num, n_scans, confounds.n_vols);
+        confounds.R = tail(confounds.R, n_scans); %takes last number of rows equal to number of scans
     end
 
     % Concatenate confounds
