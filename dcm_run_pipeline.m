@@ -551,6 +551,19 @@ if config.steps.specify_dcm
     fprintf('  STAGE 2: DCM SPECIFICATION\n');
     fprintf('=========================================================\n');
 
+    % Load results if not run
+    if ~isfield(results, 'voi')
+        log_dir = dcm_gen_path(config.paths.log_dir, config);
+        log_list= dir(fullfile(log_dir, '*.mat'));
+        if isempty(log_list)
+            error('No logs/previously run pipelines');
+        end
+        [~, newest_log] = max([log_list.datenum]);
+        newest_logfile = log_list(newest_log).name;
+        load(fullfile(log_list(newest_log).folder, newest_logfile));
+    end
+
+
     % Check that Stage 1 (VOI extraction) has been run
     if ~isfield(results, 'voi')
         error('DCM:MissingDependency', ...

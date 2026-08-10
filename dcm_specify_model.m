@@ -230,12 +230,12 @@ if length(cond_idx) ~= n_conds
     error('Not all conditions found in SPM.mat');
 end
 
-% Build input matrix
+% Build input matrix 
 DCM.U.name = config.conditions';
 DCM.U.u = [];
 for c = 1:n_conds
     % Get stimulus function (skip first 32 time bins - SPM convention for microtime)
-    u_raw = SPM.Sess(session).U(cond_idx(c)).u;
+    u_raw = SPM.Sess(session).U(c).u; % [HERE is issue 'Array indices must be positive integers or logical values.']
     if size(u_raw, 1) > 32
         DCM.U.u(:,c) = u_raw(33:end, 1);
     else
